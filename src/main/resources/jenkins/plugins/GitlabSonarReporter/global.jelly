@@ -33,8 +33,17 @@
            description="API Token for the Jenkins user">
       <f:textbox/>
     </f:entry>
-    <f:entry title="${%Ignore SSL Certificate Errors}" field="ignoreCertificateErrors">
+    <f:entry title="Ignore SSL Certificate Errors" field="ignoreCertificateErrors">
       <f:checkbox />
+    </f:entry>
+    <f:entry title="Default message header" field="messageHeader">
+      <f:textarea default="Number of new issues: $NEW_ISSUE_COUNT  \n  \n"/>
+    </f:entry>
+    <f:entry title="Default message issue" field="messageIssue">
+      <f:textarea default="**$SEVERITY** *$RULE*  \n**Line $LINE** `$COMPONENT`  \n> $MESSAGE  \n"/>
+    </f:entry>
+    <f:entry title="Default message footer" field="messageFooter">
+      <f:textarea default=""/>
     </f:entry>
   </f:section>
 </j:jelly>

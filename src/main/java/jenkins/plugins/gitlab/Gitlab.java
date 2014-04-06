@@ -37,18 +37,18 @@ import org.gitlab.api.models.GitlabProject;
  */
 public class Gitlab {
 
-    private static final Logger _logger = Logger.getLogger(Gitlab.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(Gitlab.class.getName());
 
-    private static GitlabAPI _api;
+    private static GitlabAPI API;
 
     public static GitlabAPI get() {
-        if (_api == null) {
+        if (API == null) {
             String privateToken = GitlabSonarReporter.DESCRIPTOR.getBotApiToken();
             String apiUrl = GitlabSonarReporter.DESCRIPTOR.getGitlabHostUrl();
-            _api = GitlabAPI.connect(apiUrl, privateToken);
+            API = GitlabAPI.connect(apiUrl, privateToken);
         }
 
-        return _api;
+        return API;
     }
 
     public static GitlabProject getProjectForPath(String path) {
@@ -60,16 +60,38 @@ public class Gitlab {
                 }
             }
         } catch (IOException e) {
-            _logger.log(Level.SEVERE, "Could not retrieve Project with path: {0} (Have you properly configured the project path?)", path);
+            LOGGER.log(Level.SEVERE, "Could not retrieve Project with path: {0} (Have you properly configured the project path?)", path);
         }
         return null;
+    }
+    
+    public static GitlabProject getProject(String projectPath) throws IOException{
+        LOGGER.log(Level.FINEST, "Looking for Project Path with Namespace: ''{0}''", projectPath);
+        
+        List<GitlabProject> projects = get().getProjects();
+        for (GitlabProject project : projects){
+            LOGGER.log(Level.FINEST, "Project Path with Namespace: ''{0}''", project.getPathWithNamespace());
+            if(project.getPathWithNamespace().equals(projectPath)){
+                return project;
+            }
+        }
+        return null; 
+    }
+    
+    public static GitlabMergeRequest getMergeRequest(String projectPath, int mergeRequestId) throws IOException {
+        GitlabProject project = Gitlab.getProject(projectPath);
+        return Gitlab.getMergeRequest(project, mergeRequestId);
+    }
+    
+    public static GitlabMergeRequest getMergeRequest(GitlabProject project, int mergeRequestId) throws IOException {
+        return get().getMergeRequest(project, mergeRequestId);
     }
 
     public static GitlabNote createNote(GitlabMergeRequest mergeRequest, String message) {
         try {
             return get().createNote(mergeRequest, message);
         } catch (IOException e) {
-            _logger.log(Level.SEVERE, "Failed to create note for merge request " + mergeRequest.getId(), e);
+            LOGGER.log(Level.SEVERE, "Failed to create note for merge request " + mergeRequest.getId(), e);
             return null;
         }
     }

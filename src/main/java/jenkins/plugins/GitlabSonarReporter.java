@@ -23,20 +23,31 @@ package jenkins.plugins;
 
 import hudson.Launcher;
 import hudson.Extension;
+import hudson.FilePath;
 import hudson.util.FormValidation;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
 import hudson.model.AbstractProject;
 import hudson.model.Result;
+import hudson.model.Run;
 import hudson.tasks.Builder;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.BuildStepMonitor;
 import hudson.tasks.Notifier;
 import hudson.tasks.Publisher;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jenkins.plugins.gitlab.Gitlab;
+import jenkins.plugins.sonarparser.SonarReportParser;
+import jenkins.plugins.sonarparser.models.SonarIssue;
+import jenkins.plugins.sonarparser.models.SonarReport;
 import net.sf.json.JSONObject;
+import org.gitlab.api.models.GitlabMergeRequest;
+import org.gitlab.api.models.GitlabProject;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.QueryParameter;
@@ -82,19 +93,76 @@ public class GitlabSonarReporter extends Notifier {
 
     @Override
     public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {
-        if (build.getResult() == Result.SUCCESS) {
-            Map variables = build.getBuildVariables();
-            LOGGER.log(Level.SEVERE, "Build Variables");
-            for (Object o : variables.keySet()) {
-                LOGGER.log(Level.SEVERE, "  Key: ''{0}'' Value: ''{1}''", new Object[]{o, variables.get(o)});
+        LOGGER.log(Level.FINER, "Build Result: {0}", build.getResult());
+        if(Result.SUCCESS.equals(build.getResult())){
+            try {
+                Map variables = build.getBuildVariables();
+                String mrId = (String)variables.get("gitlabMergeRequestId");
+                //get the merge request
+                GitlabMergeRequest mergeRequest = Gitlab.getMergeRequest(this.projectPath, Integer.parseInt(mrId));
+                //get the report results
+                SonarReport report = getReport(build.getWorkspace().absolutize());
+                //post the comments
+                postComments(mergeRequest, report);
+            } catch (IOException ex) {
+                LOGGER.log(Level.SEVERE, null, ex);
+            } catch (InterruptedException ex) {
+                LOGGER.log(Level.SEVERE, null, ex);
             }
         }
         return true;
     }
+    
+    private SonarReport getReport(FilePath workspace) throws IOException{
+        FilePath resultsPath = new FilePath(workspace, this.sonarResults);
+        InputStream resultsStream = null;
+        try {
+            resultsStream = resultsPath.read();
+            SonarReport report = SonarReportParser.parse(resultsStream);
+            return report;
+        } finally {
+            if(resultsStream != null){
+                resultsStream.close();
+            }
+        }
+    }
+    
+    private void postComments(GitlabMergeRequest mergeRequest, SonarReport report){
+        //we just care about the new issues
+        List<SonarIssue> newIssues = report.getNewIssues();
+        LOGGER.log(Level.SEVERE, "Number of new issues: {0}", newIssues.size());
+        
+        String comment = "";
+        for (SonarIssue issue : newIssues){
+            if(comment.length() > 0){
+                //we need to a few lines
+                comment = comment + "  \n  \n";
+            }
+            comment = comment + issueMarkup(issue);
+        }
+        comment = headerFooterMarkup(report, getDescriptor().getMessageHeader()) 
+                + comment
+                + headerFooterMarkup(report, getDescriptor().getMessageFooter());
+        Gitlab.createNote(mergeRequest, comment);
+    }
+    
+    private String headerFooterMarkup(SonarReport report, String template){
+        String message = template;
+        message = message.replaceAll("\\$NEW_ISSUE_COUNT", ""+report.getNewIssues().size());
+        return message;
+    }
+    
+    private String issueMarkup(SonarIssue issue){
+        String message = getDescriptor().getMessageIssue();
+        message = message.replaceAll("\\$SEVERITY", issue.getSeverity());
+        message = message.replaceAll("\\$RULE", issue.getRule());
+        message = message.replaceAll("\\$LINE", ""+issue.getLine());
+        message = message.replaceAll("\\$COMPONENT", issue.getComponent());
+        message = message.replaceAll("\\$MESSAGE", issue.getMessage());
+        return message;
+    }
+    
 
-    // Overridden for better type safety.
-    // If your plugin doesn't really define any property on Descriptor,
-    // you don't have to do this.
     @Override
     public DescriptorImpl getDescriptor() {
         return (DescriptorImpl) super.getDescriptor();
@@ -118,10 +186,14 @@ public class GitlabSonarReporter extends Notifier {
      */
     public static final class DescriptorImpl extends BuildStepDescriptor<Publisher> {
 
-        private String _botUsername = "jenkins";
-        private String _gitlabHostUrl;
-        private String _botApiToken;
-        private boolean _ignoreCertificateErrors = false;
+        private String botUsername = "jenkins";
+        private String gitlabHostUrl;
+        private String botApiToken;
+        private boolean ignoreCertificateErrors = false;
+        private String messageHeader;
+        private String messageIssue;
+        private String messageFooter;
+        
 
         public DescriptorImpl() {
             load();
@@ -134,15 +206,18 @@ public class GitlabSonarReporter extends Notifier {
 
         @Override
         public String getDisplayName() {
-            return "Gitlab Merge Requests Builder";
+            return "Gitlab Merge Request Sonar Results Poster";
         }
 
         @Override
         public boolean configure(StaplerRequest req, JSONObject formData) throws FormException {
-            _botUsername = formData.getString("botUsername");
-            _botApiToken = formData.getString("botApiToken");
-            _gitlabHostUrl = formData.getString("gitlabHostUrl");
-            _ignoreCertificateErrors = formData.getBoolean("ignoreCertificateErrors");
+            botUsername = formData.getString("botUsername");
+            botApiToken = formData.getString("botApiToken");
+            gitlabHostUrl = formData.getString("gitlabHostUrl");
+            ignoreCertificateErrors = formData.getBoolean("ignoreCertificateErrors");
+            messageHeader = formData.getString("messageHeader");
+            messageIssue = formData.getString("messageIssue");
+            messageFooter = formData.getString("messageFooter");
 
             save();
 
@@ -174,20 +249,33 @@ public class GitlabSonarReporter extends Notifier {
         }
 
         public boolean isIgnoreCertificateErrors() {
-            return _ignoreCertificateErrors;
+            return ignoreCertificateErrors;
         }
 
         public String getBotApiToken() {
-            return _botApiToken;
+            return botApiToken;
         }
 
         public String getGitlabHostUrl() {
-            return _gitlabHostUrl;
+            return gitlabHostUrl;
         }
 
         public String getBotUsername() {
-            return _botUsername;
+            return botUsername;
         }
+
+        public String getMessageHeader() {
+            return messageHeader;
+        }
+
+        public String getMessageIssue() {
+            return messageIssue;
+        }
+
+        public String getMessageFooter() {
+            return messageFooter;
+        }
+        
 
     }
 }
