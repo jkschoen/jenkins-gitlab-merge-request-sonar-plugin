@@ -154,19 +154,20 @@ public class GitlabSonarReporter extends Notifier {
     private String headerFooterMarkup(SonarReport report, String template){
         String message = template;
         message = message.replaceAll("\\$NEW_ISSUE_COUNT", ""+report.getNewIssues().size());
+        message = message.replaceAll("\\$TOTAL_ISSUE_COUNT", ""+report.getIssues().size());
         return message;
     }
     
     private String issueMarkup(SonarIssue issue){
         String message = getDescriptor().getMessageIssue();
+        message = message.replaceAll("\\$KEY", issue.getSeverity());
+        message = message.replaceAll("\\$COMPONENT", issue.getComponent());
+        message = message.replaceAll("\\$LINE", ""+issue.getLine());
+        message = message.replaceAll("\\$MESSAGE", issue.getMessage());
         message = message.replaceAll("\\$SEVERITY", issue.getSeverity());
         message = message.replaceAll("\\$RULE", issue.getRule());
-        message = message.replaceAll("\\$LINE", ""+issue.getLine());
-        message = message.replaceAll("\\$COMPONENT", issue.getComponent());
-        message = message.replaceAll("\\$MESSAGE", issue.getMessage());
         return message;
     }
-    
 
     @Override
     public DescriptorImpl getDescriptor() {
