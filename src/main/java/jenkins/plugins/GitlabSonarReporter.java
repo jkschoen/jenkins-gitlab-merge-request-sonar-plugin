@@ -29,7 +29,6 @@ import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
 import hudson.model.AbstractProject;
 import hudson.model.Result;
-import hudson.model.Run;
 import hudson.tasks.Builder;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.BuildStepMonitor;
@@ -47,7 +46,6 @@ import jenkins.plugins.sonarparser.models.SonarIssue;
 import jenkins.plugins.sonarparser.models.SonarReport;
 import net.sf.json.JSONObject;
 import org.gitlab.api.models.GitlabMergeRequest;
-import org.gitlab.api.models.GitlabProject;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.QueryParameter;
@@ -94,21 +92,28 @@ public class GitlabSonarReporter extends Notifier {
     @Override
     public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {
         LOGGER.log(Level.FINER, "Build Result: {0}", build.getResult());
-        if(Result.SUCCESS.equals(build.getResult())){
+        Result result = build.getResult();
+        if(result != null && result.isBetterOrEqualTo(Result.SUCCESS)){
             try {
                 Map variables = build.getBuildVariables();
                 String mrId = (String)variables.get("gitlabMergeRequestId");
                 //get the merge request
                 GitlabMergeRequest mergeRequest = Gitlab.getMergeRequest(this.projectPath, Integer.parseInt(mrId));
                 //get the report results
-                SonarReport report = getReport(build.getWorkspace().absolutize());
-                //post the comments
-                postComments(mergeRequest, report);
+                FilePath workspace = build.getWorkspace();
+                if(workspace != null){
+                    SonarReport report = getReport(workspace.absolutize());
+                    //post the comments
+                    postComments(mergeRequest, report);
+                }
             } catch (IOException ex) {
                 LOGGER.log(Level.SEVERE, null, ex);
             } catch (InterruptedException ex) {
                 LOGGER.log(Level.SEVERE, null, ex);
-            }
+            } catch (Exception ex) {
+                //we want to make sure we never break the build
+                LOGGER.log(Level.SEVERE, null, ex);
+            } 
         }
         return true;
     }
