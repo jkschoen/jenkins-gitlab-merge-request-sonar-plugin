@@ -141,7 +141,7 @@ public class GitlabSonarReporter extends Notifier {
         for (SonarIssue issue : newIssues){
             if(comment.length() > 0){
                 //we need to a few lines
-                comment = comment + "  \n  \n";
+                comment = comment + "  \n";
             }
             comment = comment + issueMarkup(issue);
         }
