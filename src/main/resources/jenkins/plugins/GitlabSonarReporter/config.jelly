@@ -28,4 +28,26 @@
                  description="The full path the json file to the sonar results.">
         <f:textbox />
     </f:entry>
+    <f:section title="Advanced Project Options">
+      <f:advanced>
+            <f:entry title="Use default message header" field="useDefaultMessageHeader">
+                <f:checkbox default="true"/>
+            </f:entry>
+            <f:entry title="Message header" field="messageHeader">
+              <f:textarea default="Number of new issues: $NEW_ISSUE_COUNT  \n  \n"/>
+            </f:entry>
+            <f:entry title="Use default message issue" field="useDefaultMessageIssue">
+                <f:checkbox default="true"/>
+            </f:entry>
+            <f:entry title="Message issue" field="messageIssue">
+              <f:textarea default="**$SEVERITY** *$RULE*  \n**Line $LINE** `$COMPONENT`  \n> $MESSAGE  \n"/>
+            </f:entry>
+            <f:entry title="Use default message footer" field="useDefaultMessageFooter">
+                <f:checkbox default="true"/>
+            </f:entry>
+            <f:entry title="Message footer" field="messageFooter">
+              <f:textarea default=""/>
+            </f:entry>
+      </f:advanced>
+    </f:section>
 </j:jelly>

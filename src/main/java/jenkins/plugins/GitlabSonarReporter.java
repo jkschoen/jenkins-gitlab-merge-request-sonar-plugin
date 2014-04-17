@@ -50,35 +50,30 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.QueryParameter;
 
-/**
- * Sample {@link Builder}.
- *
- * <p>
- * When the user configures the project and enables this builder,
- * {@link DescriptorImpl#newInstance(StaplerRequest)} is invoked and a new
- * {@link GitlabSonarReporter} is created. The created instance is persisted to
- * the project configuration XML by using XStream, so this allows you to use
- * instance fields (like {@link #name}) to remember the configuration.
- *
- * <p>
- * When a build is performed, the
- * {@link #perform(AbstractBuild, Launcher, BuildListener)} method will be
- * invoked.
- *
- * @author Kohsuke Kawaguchi
- */
 public class GitlabSonarReporter extends Notifier {
 
     private static final Logger LOGGER = Logger.getLogger(GitlabSonarReporter.class.getName());
 
     private final String projectPath;
     private final String sonarResults;
+    private final Boolean useDefaultMessageHeader;
+    private final Boolean useDefaultMessageIssue;
+    private final Boolean useDefaultMessageFooter;
+    private final String messageHeader;
+    private final String messageIssue;
+    private final String messageFooter;
 
     // Fields in config.jelly must match the parameter names in the "DataBoundConstructor"
     @DataBoundConstructor
-    public GitlabSonarReporter(String projectPath, String sonarResults) {
+    public GitlabSonarReporter(String projectPath, String sonarResults, Boolean useDefaultMessageHeader, Boolean useDefaultMessageIssue, Boolean useDefaultMessageFooter, String messageHeader, String messageIssue, String messageFooter) {
         this.projectPath = projectPath;
         this.sonarResults = sonarResults;
+        this.useDefaultMessageHeader = useDefaultMessageHeader;
+        this.useDefaultMessageIssue = useDefaultMessageIssue;
+        this.useDefaultMessageFooter = useDefaultMessageFooter;
+        this.messageHeader = messageHeader;
+        this.messageIssue = messageIssue;
+        this.messageFooter = messageFooter;
     }
 
     public String getProjectPath() {
@@ -145,10 +140,31 @@ public class GitlabSonarReporter extends Notifier {
             }
             comment = comment + issueMarkup(issue);
         }
-        comment = headerFooterMarkup(report, getDescriptor().getMessageHeader()) 
+        comment = headerFooterMarkup(report, getMessageHeader())
                 + comment
-                + headerFooterMarkup(report, getDescriptor().getMessageFooter());
+                + headerFooterMarkup(report, getMessageFooter());
         Gitlab.createNote(mergeRequest, comment);
+    }
+
+    public String getMessageHeader(){
+        if(this.useDefaultMessageHeader){
+            return getDescriptor().getMessageHeader();
+        }
+        return this.messageHeader;
+    }
+
+    public String getMessageFooter(){
+        if(this.useDefaultMessageFooter){
+            return getDescriptor().getMessageFooter();
+        }
+        return this.messageFooter;
+    }
+
+    public String getMessageIssue(){
+        if(this.useDefaultMessageIssue){
+            return getDescriptor().getMessageIssue();
+        }
+        return this.messageIssue;
     }
     
     private String headerFooterMarkup(SonarReport report, String template){
@@ -159,7 +175,7 @@ public class GitlabSonarReporter extends Notifier {
     }
     
     private String issueMarkup(SonarIssue issue){
-        String message = getDescriptor().getMessageIssue();
+        String message = getMessageIssue();
         message = message.replaceAll("\\$KEY", issue.getSeverity());
         message = message.replaceAll("\\$COMPONENT", issue.getComponent());
         message = message.replaceAll("\\$LINE", ""+issue.getLine());
