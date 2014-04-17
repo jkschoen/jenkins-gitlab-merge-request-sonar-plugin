@@ -86,17 +86,20 @@ public class GitlabSonarReporter extends Notifier {
 
     @Override
     public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) {
-        LOGGER.log(Level.FINER, "Build Result: {0}", build.getResult());
+        LOGGER.log(Level.INFO, "Starting Gitlab Sonar Reporter, current Build Result: {0}", build.getResult());
         Result result = build.getResult();
         if(result != null && result.isBetterOrEqualTo(Result.SUCCESS)){
             try {
+                LOGGER.log(Level.INFO, "Looking for Merge Request on Gitlab");
                 Map variables = build.getBuildVariables();
                 String mrId = (String)variables.get("gitlabMergeRequestId");
                 //get the merge request
                 GitlabMergeRequest mergeRequest = Gitlab.getMergeRequest(this.projectPath, Integer.parseInt(mrId));
+                LOGGER.log(Level.INFO, "Found Merge Request on Gitlab");
                 //get the report results
                 FilePath workspace = build.getWorkspace();
                 if(workspace != null){
+                    LOGGER.log(Level.INFO, "Getting the Sonar Report.");
                     SonarReport report = getReport(workspace.absolutize());
                     //post the comments
                     postComments(mergeRequest, report);
@@ -130,7 +133,7 @@ public class GitlabSonarReporter extends Notifier {
     private void postComments(GitlabMergeRequest mergeRequest, SonarReport report){
         //we just care about the new issues
         List<SonarIssue> newIssues = report.getNewIssues();
-        LOGGER.log(Level.SEVERE, "Number of new issues: {0}", newIssues.size());
+        LOGGER.log(Level.INFO, "Number of new issues: {0}", newIssues.size());
         
         String comment = "";
         for (SonarIssue issue : newIssues){
@@ -143,6 +146,7 @@ public class GitlabSonarReporter extends Notifier {
         comment = headerFooterMarkup(report, getMessageHeader())
                 + comment
                 + headerFooterMarkup(report, getMessageFooter());
+        LOGGER.log(Level.INFO, "Creating note on Gitlab.");
         Gitlab.createNote(mergeRequest, comment);
     }
 
